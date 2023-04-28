@@ -1,0 +1,42 @@
+WITH cleaned_timestamps AS (
+    SELECT
+        c.id AS id,
+        SPLIT(SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(0)], '/')[SAFE_OFFSET(0)] AS month_component,
+        SPLIT(SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(0)], '/')[SAFE_OFFSET(1)] AS day_component,
+        SPLIT(SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(0)], '/')[SAFE_OFFSET(2)] AS year_component,
+        SPLIT(SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(1)], ':')[SAFE_OFFSET(0)] AS hour_component,
+        SPLIT(SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(1)], ':')[SAFE_OFFSET(1)] AS minute_component,
+        SPLIT(SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(1)], ':')[SAFE_OFFSET(2)] AS second_component,
+        SPLIT(c.ActivityMinute, ' ')[SAFE_OFFSET(2)] AS am_pm,
+        SAFE_CAST(c.calories AS FLOAT64) AS calories,
+        SAFE_CAST(a.Intensity AS INT64) AS level
+    FROM
+        bella-beats-382617.Calories.minuteCalories AS c
+    JOIN
+        bella-beats-382617.Activity.Intensity AS a
+    ON
+        c.id = a.id AND c.ActivityMinute = a.ActivityMinute
+),
+combined_data AS (
+    SELECT
+        id,
+        EXTRACT(DAYOFWEEK FROM PARSE_DATE("%Y-%m-%d", CONCAT(year_component, '-', LPAD(month_component, 2, '0'), '-', LPAD(day_component, 2, '0')))) AS day_of_week,
+        MOD(CAST(hour_component AS INT64), 12) + IF(am_pm = 'PM', 12, 0) AS hour_of_day,
+        calories,
+        level
+    FROM
+        cleaned_timestamps
+)
+
+SELECT
+    id,
+    day_of_week,
+    hour_of_day,
+    SUM(calories) AS total_calories,
+    AVG(level) AS avg_activity_level
+FROM
+    combined_data
+GROUP BY
+    id, day_of_week, hour_of_day
+ORDER BY
+    id, day_of_week, hour_of_day;
